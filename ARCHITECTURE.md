@@ -19,64 +19,65 @@
 
 ```
 AxonVisionHomeAssignment/
-├── README.md
-├── assignment-description.md
-├── ARCHITECTURE.md
-├── requirements.txt
-├── 
-├── # Phase Runners (Demo Each Development Stage)
-├── phase_a_runner.py         # Basic pipeline demo
-├── phase_b_runner.py         # Pipeline + motion blur demo
-├── phase_c_runner.py         # Full system + auto-shutdown demo
-├── 
-├── # Process Services (Separate Processes)
-├── streamer_process.py       # Video streaming service
-├── detector_process.py       # Motion detection service  
-├── display_process.py        # Display/rendering service
-├── 
-├── config/
-│   ├── __init__.py
-│   ├── settings.py
-│   └── communication.py
-├── core/
-│   ├── __init__.py
-│   ├── base_component.py
-│   └── data_models.py
-├── components/
-│   ├── __init__.py
-│   ├── streamer/
+├── README.md                    # Project overview and usage
+├── ARCHITECTURE.md              # This file - system design
+├── DESIGN_DECISIONS.md          # Detailed explanation of choices
+├── assignment-description.md    # Original requirements
+├── requirements.txt             # Python dependencies
+├── run_pipeline.py             # Unified runner for all phases
+├── .gitignore                  # Git ignore rules
+│
+├── data/                       # Video files
+│   └── People - 6387.mp4       # Test video
+│
+├── src/                        # Source code
+│   ├── phase_a_runner.py       # Phase A orchestrator
+│   ├── phase_b_runner.py       # Phase B orchestrator (with blur)
+│   ├── phase_c_runner.py       # Phase C orchestrator (auto-shutdown)
+│   │
+│   ├── processes/              # Process entry points
+│   │   ├── streamer_process.py # Video streaming process
+│   │   ├── detector_process.py # Motion detection process
+│   │   ├── display_process.py  # Video display process
+│   │   ├── web_streamer_process.py # Web streaming process
+│   │   └── logging_service.py  # Centralized logging
+│   │
+│   ├── components/             # Core components
 │   │   ├── __init__.py
-│   │   ├── video_streamer.py
-│   │   └── frame_reader.py
-│   ├── detector/
+│   │   ├── streamer/
+│   │   │   ├── __init__.py
+│   │   │   └── video_streamer.py
+│   │   ├── detector/
+│   │   │   ├── __init__.py
+│   │   │   └── motion_detector.py
+│   │   └── display/
+│   │       ├── __init__.py
+│   │       ├── video_display.py
+│   │       └── web_streamer.py
+│   │
+│   ├── communication/          # IPC/Network layer
 │   │   ├── __init__.py
-│   │   ├── motion_detector.py
-│   │   └── opencv_detector.py
-│   └── display/
+│   │   ├── protocol.py         # Message serialization
+│   │   └── zmq_manager.py      # ZeroMQ socket management
+│   │
+│   ├── core/                   # Data models
+│   │   ├── __init__.py
+│   │   └── data_models.py
+│   │
+│   └── utils/                  # Utilities
 │       ├── __init__.py
-│       ├── video_display.py
-│       └── frame_renderer.py
-├── communication/
+│       └── centralized_logger.py
+│
+├── examples/                   # Example code
+│   └── basic_vmd.py           # Original motion detection
+│
+├── tests/                      # Test suite
 │   ├── __init__.py
-│   ├── zmq_manager.py
-│   ├── message_handler.py
-│   └── protocol.py
-├── utils/
-│   ├── __init__.py
-│   ├── logger.py
-│   ├── performance_monitor.py
-│   └── config_loader.py
-├── tests/
-│   ├── __init__.py
-│   ├── test_streamer.py
-│   ├── test_detector.py
-│   └── test_display.py
-├── assets/
-│   └── People - 6387.mp4
-└── docs/
-    ├── phase_a.md
-    ├── phase_b.md
-    └── phase_c.md
+│   ├── test_basic.py
+│   └── test_pipeline_integration.py
+│
+└── docs/                       # Documentation
+    └── _תרגיל תוכנה 2023.docx # Original assignment (Hebrew)
 ```
 
 ## 🔧 Component Architecture
@@ -129,20 +130,36 @@ class VideoDisplay:
 
 ## 🔄 Communication Strategy
 
-### ⭐ **CHOSEN: ZeroMQ with IPC Transport (Production-Grade)**
-- **Technology**: ZeroMQ with Inter-Process Communication (IPC) sockets
-- **Endpoints**: `ipc://streamer_detector`, `ipc://detector_display`, etc.
-- **Pros**: High performance, optimized for video, non-blocking, industry standard, no network overhead
-- **Cons**: External dependency (pip install pyzmq)
-- **Use Case**: Local video processing with separate processes on same machine
-- **Why**: Perfect balance of production-grade messaging with local IPC performance
+### ⭐ **CHOSEN: ZeroMQ with Platform-Adaptive Transport**
+- **Technology**: ZeroMQ with automatic transport selection
+  - **IPC sockets** on Linux/Unix: `ipc://streamer_detector`, etc. (better performance)
+  - **TCP sockets** on Windows: `tcp://127.0.0.1:5555`, etc. (IPC not supported)
+- **Message Format**: Pickle protocol 5 with out-of-band buffers for numpy arrays
+- **Pattern**: PUSH/PULL for unidirectional flow, PUB/SUB for broadcasts
 
-### Alternative Options:
-- **Multiprocessing Queues**: Simple but serialization overhead for video frames
-- **Shared Memory**: Fastest but complex synchronization
-- **Named Pipes**: OS-specific, complex for cross-platform deployment
+#### Why ZeroMQ?
+1. **Performance**: Zero-copy message passing, optimized for large binary data
+2. **Reliability**: Automatic reconnection, message queuing, no data loss
+3. **Flexibility**: Works identically across platforms (Windows/Linux/Mac)
+4. **Industry Standard**: Used in production video processing systems
+5. **Developer Experience**: Clean API, good documentation, active community
 
-**Decision Rationale**: ZeroMQ is the industry standard for high-performance video processing pipelines, demonstrating production-ready architecture skills.
+#### Implementation Details
+- **Serialization**: Pickle protocol 5 for numpy array optimization
+- **Socket Types**: 
+  - PUSH/PULL for pipeline stages (guaranteed delivery)
+  - PUB/SUB for logging service (fire-and-forget)
+- **Error Handling**: Automatic reconnection with exponential backoff
+- **Flow Control**: High water mark (HWM) set to prevent memory overflow
+
+#### Platform Adaptation
+- **Automatic Detection**: System detects platform and chooses optimal transport
+- **Linux/Unix**: Uses IPC sockets for maximum performance
+- **Windows**: Falls back to TCP (localhost) since IPC not supported
+- **Override**: Set `FORCE_TCP=true` environment variable to force TCP on any platform
+- **Same API**: Application code unchanged regardless of transport
+
+For detailed explanation of all design choices, see [DESIGN_DECISIONS.md](DESIGN_DECISIONS.md).
 
 ## 📊 Data Models
 

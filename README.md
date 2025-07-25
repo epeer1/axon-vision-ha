@@ -24,17 +24,21 @@ A production-grade, multi-process video processing pipeline implementing real-ti
 - ✅ **Multi-process architecture** with separate video streaming, motion detection, and display processes
 - ✅ **Real-time motion detection** using OpenCV frame differencing algorithm
 - ✅ **Live video display** with detection bounding boxes and timestamps
-- ✅ **ZeroMQ IPC communication** for high-performance inter-process messaging
+- ✅ **ZeroMQ communication** with platform-adaptive transport (IPC on Linux, TCP on Windows)
 - ✅ **Centralized logging** with file and console output
 - ✅ **Professional error handling** and resource management
 
-### Phase B Ready - Motion Blur
-- ✅ **Motion blur toggle** available via `--blur-detections` flag
-- ✅ **Gaussian blur** applied to detected motion areas
+### Phase B - Motion Blur
+- ✅ **Automatic motion blur** on detected areas (enabled by default in Phase B)
+- ✅ **Pixelation effect** for clear visual feedback
+- ✅ **Red "MOTION BLUR: ON" indicator** in video display
+- ✅ **Toggle support** via `--no-blur` flag for comparison
 
-### Phase C Ready - Auto-Shutdown  
-- ✅ **End-of-stream handling** with automatic pipeline shutdown
-- ✅ **Graceful process termination** when video completes
+### Phase C - Automatic Shutdown
+- ✅ **Automatic pipeline shutdown** when video ends
+- ✅ **Graceful cascade termination** of all processes
+- ✅ **Clean resource cleanup** and proper exit codes
+- ✅ **All Phase B features** included
 
 ## 🚀 Quick Start
 
@@ -44,20 +48,68 @@ A production-grade, multi-process video processing pipeline implementing real-ti
 pip install -r requirements.txt
 ```
 
+### Using Custom Video Files
+
+The pipeline accepts any video file supported by OpenCV (mp4, avi, mov, etc.):
+
+```bash
+# Default video (included in repo)
+python run_pipeline.py
+
+# Custom video file - relative path
+python run_pipeline.py "videos/my_video.mp4"
+
+# Custom video file - absolute path
+python run_pipeline.py "C:/Users/name/Videos/my_video.mp4"
+
+# Custom video with specific phase
+python run_pipeline.py "my_video.mp4" -p b
+
+# For filenames with spaces, use quotes
+python run_pipeline.py "My Video File.mp4" -p c
+```
+
 ### Run Complete Pipeline
 
 ```bash
-# Basic usage (uses default video in data/)
+# Run Phase A (basic pipeline) - default
 python run_pipeline.py
 
-# With specific video file
-python run_pipeline.py "data/People - 6387.mp4"
+# Run Phase B (with motion blur)
+python run_pipeline.py -p b
 
-# With motion blur (Phase B)
-python run_pipeline.py "data/People - 6387.mp4" --blur-detections
+# Run Phase C (with automatic shutdown)
+python run_pipeline.py -p c
+
+# With specific video file
+python run_pipeline.py "data/People - 6387.mp4" -p b
+
+# Phase B without blur (for comparison)
+python run_pipeline.py -p b --no-blur
+
+# Phase A with blur enabled
+python run_pipeline.py -p a --blur-detections
 
 # Show logs after completion
-python run_pipeline.py "data/People - 6387.mp4" --show-logs
+python run_pipeline.py -p c --show-logs
+
+# View all available options
+python run_pipeline.py --help
+```
+
+### Direct Phase Runners
+
+You can also run specific phases directly:
+
+```bash
+# Phase A
+python src/phase_a_runner.py "data/People - 6387.mp4"
+
+# Phase B
+python src/phase_b_runner.py "data/People - 6387.mp4"
+
+# Phase C
+python src/phase_c_runner.py "data/People - 6387.mp4"
 ```
 
 ### Controls
@@ -72,8 +124,9 @@ AxonVisionHomeAssignment/
 ├── README.md                    # This file
 ├── requirements.txt             # Python dependencies
 ├── ARCHITECTURE.md              # Detailed system architecture
+├── DESIGN_DECISIONS.md          # Comprehensive explanation of all choices
 ├── assignment-description.md    # Original assignment requirements
-├── run_pipeline.py             # Simple runner script
+├── run_pipeline.py             # Unified runner script for all phases
 │
 ├── data/                       # Video files
 │   └── People - 6387.mp4       # Test video
@@ -217,7 +270,7 @@ git show phase-a-v1.0     # View specific phase
 
 ## 🎯 Assignment Requirements Status
 
-### ✅ Phase A Requirements
+### ✅ Phase A - Core Pipeline
 - [x] **Multi-process architecture** (Streamer, Detector, Display as separate processes)
 - [x] **Motion detection** (OpenCV-based frame differencing)
 - [x] **Real-time display** (cv2.imshow with smooth playback)
@@ -225,11 +278,23 @@ git show phase-a-v1.0     # View specific phase
 - [x] **Timestamp overlay** (top-left corner with millisecond precision)
 - [x] **Inter-process communication** (ZeroMQ IPC for production-grade messaging)
 
-### ✅ Phase B Ready
-- [x] **Motion blur capability** (Gaussian blur on detected regions)
+### ✅ Phase B - Motion Blur
+- [x] **Motion blur on detections** (pixelation effect for clear visibility)
+- [x] **Visual indicator** ("MOTION BLUR: ON" overlay when active)
+- [x] **Toggle support** (--no-blur flag for easy comparison)
+- [x] **All Phase A features preserved** (full backward compatibility)
 
-### ✅ Phase C Ready  
-- [x] **Auto-shutdown mechanism** (end-of-stream signal handling)
+### ✅ Phase C - Automatic Shutdown
+- [x] **End-of-stream detection** (recognizes when video completes)
+- [x] **Cascade shutdown** (orderly termination of all processes)
+- [x] **Clean resource cleanup** (proper socket closing and thread joining)
+- [x] **All Phase A+B features preserved** (complete functionality)
+
+## 📚 Documentation
+
+- **[ARCHITECTURE.md](ARCHITECTURE.md)** - System design and component details
+- **[DESIGN_DECISIONS.md](DESIGN_DECISIONS.md)** - Comprehensive explanation of all technical choices
+- **[assignment-description.md](assignment-description.md)** - Original requirements
 
 ## 🏢 Production Considerations
 
