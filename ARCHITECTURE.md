@@ -129,11 +129,13 @@ class VideoDisplay:
 
 ## 🔄 Communication Strategy
 
-### ⭐ **CHOSEN: ZeroMQ Sockets (Production-Grade)**
-- **Pros**: High performance, optimized for video, non-blocking, industry standard
+### ⭐ **CHOSEN: ZeroMQ with IPC Transport (Production-Grade)**
+- **Technology**: ZeroMQ with Inter-Process Communication (IPC) sockets
+- **Endpoints**: `ipc://streamer_detector`, `ipc://detector_display`, etc.
+- **Pros**: High performance, optimized for video, non-blocking, industry standard, no network overhead
 - **Cons**: External dependency (pip install pyzmq)
-- **Use Case**: Production real-time video processing systems
-- **Why**: Perfect for Axon's production infrastructure requirements
+- **Use Case**: Local video processing with separate processes on same machine
+- **Why**: Perfect balance of production-grade messaging with local IPC performance
 
 ### Alternative Options:
 - **Multiprocessing Queues**: Simple but serialization overhead for video frames
