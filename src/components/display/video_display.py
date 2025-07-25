@@ -32,6 +32,9 @@ class VideoDisplay:
         self.blur_detections = blur_detections
         self.show_window = show_window
         
+        # Debug print
+        print(f"[VideoDisplay] Initialized with blur_detections={blur_detections}")
+        
         # ZMQ communication
         self.result_receiver: Optional[ZMQManager] = None
         self.web_sender: Optional[ZMQManager] = None  # Send to web streamer
@@ -158,6 +161,10 @@ class VideoDisplay:
                     # Process and optionally display the frame with detections
                     processed_frame = self._process_frame(message)
                     
+                    # Update the message with processed frame before forwarding
+                    if processed_frame is not None:
+                        message.frame = processed_frame
+                    
                     # Forward to web streamer
                     self._forward_to_web(message)
                     
@@ -190,13 +197,25 @@ class VideoDisplay:
             # Add timestamp (assignment requirement)
             self._add_timestamp(frame)
             
+            # Always add blur indicator if blur is enabled
+            if self.blur_detections:
+                blur_text = "MOTION BLUR: ON"
+                cv2.putText(frame, blur_text, (frame.shape[1]//2 - 100, 80), 
+                           self.font, 1.0, (0, 0, 255), 3)
+            
             # Draw detection boxes (assignment requirement)
             detections_drawn = self._draw_detections(frame, result.detections)
             self.total_detections_drawn += detections_drawn
             
             # Apply motion blur if enabled (Phase B feature)
             if self.blur_detections and result.detections:
+                self.logger.info(f"Applying blur to {len(result.detections)} detections")
                 frame = self._apply_motion_blur(frame, result.detections)
+            else:
+                if self.blur_detections:
+                    self.logger.debug(f"Blur enabled but no detections in frame {result.frame_id}")
+                else:
+                    self.logger.debug("Blur not enabled")
             
             # Add FPS counter if enabled
             if self.show_fps:
@@ -205,9 +224,13 @@ class VideoDisplay:
             # Add detection info
             self._add_detection_info(frame, result)
             
+            # Add blur indicator if enabled
+            if self.blur_detections and result.detections:
+                self._add_blur_indicator(frame)
+            
             # Update statistics
             self.total_frames_displayed += 1
-            self._update_fps_calculation()
+            self._update_fps()
             
             return frame
             
@@ -282,14 +305,29 @@ class VideoDisplay:
         for detection in detections:
             x, y, w, h = detection.bbox
             
+            # Ensure coordinates are within frame bounds
+            x = max(0, x)
+            y = max(0, y)
+            x_end = min(frame.shape[1], x + w)
+            y_end = min(frame.shape[0], y + h)
+            
             # Extract region
-            region = frame[y:y+h, x:x+w]
+            region = frame[y:y_end, x:x_end].copy()
             
-            # Apply Gaussian blur
-            blurred_region = cv2.GaussianBlur(region, (15, 15), 0)
-            
-            # Replace region in frame
-            frame[y:y+h, x:x+w] = blurred_region
+            if region.size > 0:  # Check if region is valid
+                # Apply pixelation effect for very obvious blur
+                pixel_size = 20
+                # Ensure minimum size for resize
+                new_w = max(1, w//pixel_size)
+                new_h = max(1, h//pixel_size)
+                temp = cv2.resize(region, (new_w, new_h), interpolation=cv2.INTER_LINEAR)
+                pixelated = cv2.resize(temp, (region.shape[1], region.shape[0]), interpolation=cv2.INTER_NEAREST)
+                
+                # Replace region in frame
+                frame[y:y_end, x:x_end] = pixelated
+                
+                # Add a red border around blurred area for debugging
+                cv2.rectangle(frame, (x, y), (x_end, y_end), (0, 0, 255), 3)
         
         return frame
     
@@ -330,6 +368,23 @@ class VideoDisplay:
         # Info text
         cv2.putText(frame, info_text, (x, y), 
                    self.font, self.font_scale, self.text_color, self.text_thickness)
+    
+    def _add_blur_indicator(self, frame: np.ndarray):
+        """Add blur indicator to frame."""
+        blur_text = "MOTION BLUR: ON"
+        
+        # Position in top-center
+        text_size = cv2.getTextSize(blur_text, self.font, self.font_scale * 1.2, self.text_thickness + 1)[0]
+        x = (frame.shape[1] - text_size[0]) // 2
+        y = 50
+        
+        # Background rectangle with red color
+        cv2.rectangle(frame, (x - 10, y - text_size[1] - 10), 
+                     (x + text_size[0] + 10, y + 10), (0, 0, 255), -1)
+        
+        # Blur indicator text in white
+        cv2.putText(frame, blur_text, (x, y), 
+                   self.font, self.font_scale * 1.2, (255, 255, 255), self.text_thickness + 1)
     
     def _update_fps(self):
         """Update FPS calculation."""
