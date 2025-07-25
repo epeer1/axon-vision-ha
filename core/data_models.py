@@ -112,4 +112,49 @@ class PerformanceMetrics:
             cpu_usage_percent=cpu_usage_percent,
             queue_depth=queue_depth,
             timestamp=time.time()
-        ) 
+        )
+
+
+@dataclass  
+class LogMessage:
+    """Centralized logging message for pipeline components."""
+    level: str  # "DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"
+    component: str  # "Streamer", "Detector", "Display", "LoggingService"
+    message: str
+    timestamp: float
+    frame_id: Optional[int] = None
+    metadata: Optional[Dict[str, Any]] = None
+    
+    @classmethod
+    def create(cls, level: str, component: str, message: str, 
+               frame_id: Optional[int] = None, metadata: Optional[Dict[str, Any]] = None):
+        """Create a log message with current timestamp."""
+        return cls(
+            level=level.upper(),
+            component=component,
+            message=message,
+            timestamp=time.time(),
+            frame_id=frame_id,
+            metadata=metadata or {}
+        )
+    
+    @classmethod
+    def info(cls, component: str, message: str, frame_id: Optional[int] = None):
+        """Create an INFO level log message."""
+        return cls.create("INFO", component, message, frame_id)
+    
+    @classmethod
+    def warning(cls, component: str, message: str, frame_id: Optional[int] = None):
+        """Create a WARNING level log message."""
+        return cls.create("WARNING", component, message, frame_id)
+    
+    @classmethod
+    def error(cls, component: str, message: str, frame_id: Optional[int] = None):
+        """Create an ERROR level log message."""
+        return cls.create("ERROR", component, message, frame_id)
+    
+    def format_message(self) -> str:
+        """Format log message for display."""
+        timestamp_str = time.strftime('%H:%M:%S', time.localtime(self.timestamp))
+        frame_info = f" [Frame {self.frame_id}]" if self.frame_id is not None else ""
+        return f"{timestamp_str} {self.level:8} {self.component:12}{frame_info} | {self.message}" 

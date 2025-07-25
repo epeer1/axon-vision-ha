@@ -7,7 +7,7 @@ from typing import Optional, Union
 import time
 
 from .protocol import MessageProtocol, Endpoints
-from core.data_models import FrameData, DetectionResult, SystemMessage, PerformanceMetrics
+from core.data_models import FrameData, DetectionResult, SystemMessage, PerformanceMetrics, LogMessage
 
 
 class ZMQManager:
@@ -131,7 +131,25 @@ class ZMQManager:
             self.logger.error(f"Send failed: {e}")
             return False
     
-    def receive(self, timeout_ms: int = 1000) -> Optional[Union[FrameData, DetectionResult, SystemMessage, PerformanceMetrics]]:
+    def send_log_message(self, log_msg: LogMessage, timeout_ms: int = 1000) -> bool:
+        """Send LogMessage."""
+        if not self.is_connected:
+            self.logger.error("Socket not connected")
+            return False
+        
+        try:
+            data = MessageProtocol.serialize_log_message(log_msg)
+            self.socket.send(data, zmq.NOBLOCK)
+            return True
+            
+        except zmq.Again:
+            self.logger.warning(f"Send timeout after {timeout_ms}ms")
+            return False
+        except Exception as e:
+            self.logger.error(f"Send failed: {e}")
+            return False
+    
+    def receive(self, timeout_ms: int = 1000) -> Optional[Union[FrameData, DetectionResult, SystemMessage, PerformanceMetrics, LogMessage]]:
         """Receive and deserialize message."""
         if not self.is_connected:
             self.logger.error("Socket not connected")
@@ -215,4 +233,22 @@ class PipelineComm:
         )
         # Subscribe to all control messages
         manager.socket.setsockopt(zmq.SUBSCRIBE, b"")
-        return manager 
+        return manager
+    
+    @staticmethod
+    def create_log_sender() -> ZMQManager:
+        """Create sender for centralized logging."""
+        return ZMQManager(
+            socket_type=zmq.PUSH,
+            endpoint=Endpoints.LOGGING_CHANNEL,
+            bind=False  # Components push to logging service
+        )
+    
+    @staticmethod
+    def create_log_receiver() -> ZMQManager:
+        """Create receiver for centralized logging service."""
+        return ZMQManager(
+            socket_type=zmq.PULL,
+            endpoint=Endpoints.LOGGING_CHANNEL,
+            bind=True  # Logging service binds and receives
+        ) 

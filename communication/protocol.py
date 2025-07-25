@@ -5,7 +5,7 @@ import json
 import pickle
 from typing import Any, Dict, Union
 import numpy as np
-from core.data_models import FrameData, DetectionResult, SystemMessage, PerformanceMetrics
+from core.data_models import FrameData, DetectionResult, SystemMessage, PerformanceMetrics, LogMessage
 
 
 class MessageProtocol:
@@ -16,6 +16,7 @@ class MessageProtocol:
     DETECTION_RESULT = "detection_result"
     SYSTEM_MESSAGE = "system_message"
     PERFORMANCE_METRICS = "performance_metrics"
+    LOG_MESSAGE = "log_message"
     
     @staticmethod
     def serialize_frame_data(frame_data: FrameData) -> bytes:
@@ -77,7 +78,21 @@ class MessageProtocol:
         return json.dumps(data).encode('utf-8')
     
     @staticmethod
-    def deserialize(data: bytes) -> Union[FrameData, DetectionResult, SystemMessage, PerformanceMetrics]:
+    def serialize_log_message(log_msg: LogMessage) -> bytes:
+        """Serialize LogMessage for transmission."""
+        data = {
+            'type': MessageProtocol.LOG_MESSAGE,
+            'level': log_msg.level,
+            'component': log_msg.component,
+            'message': log_msg.message,
+            'timestamp': log_msg.timestamp,
+            'frame_id': log_msg.frame_id,
+            'metadata': log_msg.metadata
+        }
+        return json.dumps(data).encode('utf-8')
+    
+    @staticmethod
+    def deserialize(data: bytes) -> Union[FrameData, DetectionResult, SystemMessage, PerformanceMetrics, LogMessage]:
         """Deserialize received data based on message type."""
         try:
             # Try JSON first (for system messages and performance metrics)
@@ -97,6 +112,15 @@ class MessageProtocol:
                         cpu_usage_percent=json_data['cpu_usage_percent'],
                         queue_depth=json_data['queue_depth'],
                         timestamp=json_data['timestamp']
+                    )
+                elif json_data.get('type') == MessageProtocol.LOG_MESSAGE:
+                    return LogMessage(
+                        level=json_data['level'],
+                        component=json_data['component'],
+                        message=json_data['message'],
+                        timestamp=json_data['timestamp'],
+                        frame_id=json_data.get('frame_id'),
+                        metadata=json_data.get('metadata', {})
                     )
             except (json.JSONDecodeError, UnicodeDecodeError):
                 pass
@@ -146,4 +170,5 @@ class Endpoints:
     STREAMER_TO_DETECTOR = "ipc://streamer_detector"
     DETECTOR_TO_DISPLAY = "ipc://detector_display"
     CONTROL_CHANNEL = "ipc://control_channel"
-    MONITORING_CHANNEL = "ipc://monitoring_channel" 
+    MONITORING_CHANNEL = "ipc://monitoring_channel"
+    LOGGING_CHANNEL = "ipc://pipeline_logging" 
