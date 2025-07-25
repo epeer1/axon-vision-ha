@@ -63,16 +63,39 @@ class MessageProtocol:
         return json.dumps(data).encode('utf-8')
     
     @staticmethod
-    def deserialize(data: bytes) -> Union[FrameData, DetectionResult, SystemMessage]:
+    def serialize_performance_metrics(metrics: PerformanceMetrics) -> bytes:
+        """Serialize PerformanceMetrics for transmission."""
+        data = {
+            'type': MessageProtocol.PERFORMANCE_METRICS,
+            'fps': metrics.fps,
+            'latency_ms': metrics.latency_ms,
+            'memory_usage_mb': metrics.memory_usage_mb,
+            'cpu_usage_percent': metrics.cpu_usage_percent,
+            'queue_depth': metrics.queue_depth,
+            'timestamp': metrics.timestamp
+        }
+        return json.dumps(data).encode('utf-8')
+    
+    @staticmethod
+    def deserialize(data: bytes) -> Union[FrameData, DetectionResult, SystemMessage, PerformanceMetrics]:
         """Deserialize received data based on message type."""
         try:
-            # Try JSON first (for system messages)
+            # Try JSON first (for system messages and performance metrics)
             try:
                 json_data = json.loads(data.decode('utf-8'))
                 if json_data.get('type') == MessageProtocol.SYSTEM_MESSAGE:
                     return SystemMessage(
                         message_type=json_data['message_type'],
                         payload=json_data['payload'],
+                        timestamp=json_data['timestamp']
+                    )
+                elif json_data.get('type') == MessageProtocol.PERFORMANCE_METRICS:
+                    return PerformanceMetrics(
+                        fps=json_data['fps'],
+                        latency_ms=json_data['latency_ms'],
+                        memory_usage_mb=json_data['memory_usage_mb'],
+                        cpu_usage_percent=json_data['cpu_usage_percent'],
+                        queue_depth=json_data['queue_depth'],
                         timestamp=json_data['timestamp']
                     )
             except (json.JSONDecodeError, UnicodeDecodeError):
