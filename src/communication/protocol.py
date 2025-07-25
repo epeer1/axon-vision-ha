@@ -164,11 +164,51 @@ class MessageProtocol:
             raise ValueError(f"Failed to deserialize message: {e}")
 
 
-# ZeroMQ IPC endpoint configurations
+# Platform-aware endpoint configurations
+import platform
+import os
+
 class Endpoints:
-    """Standard IPC endpoint assignments for pipeline communication."""
-    STREAMER_TO_DETECTOR = "ipc://streamer_detector"
-    DETECTOR_TO_DISPLAY = "ipc://detector_display"
-    CONTROL_CHANNEL = "ipc://control_channel"
-    MONITORING_CHANNEL = "ipc://monitoring_channel"
-    LOGGING_CHANNEL = "ipc://pipeline_logging" 
+    """Platform-aware endpoint assignments for pipeline communication."""
+    
+    def __init__(self):
+        """Initialize endpoints based on platform."""
+        self.is_windows = platform.system() == "Windows"
+        self.use_tcp = self.is_windows or os.getenv("FORCE_TCP", "false").lower() == "true"
+        
+        if self.use_tcp:
+            # TCP endpoints for Windows or forced TCP
+            self.STREAMER_TO_DETECTOR = "tcp://127.0.0.1:5555"
+            self.DETECTOR_TO_DISPLAY = "tcp://127.0.0.1:5556"
+            self.DISPLAY_TO_WEB = "tcp://127.0.0.1:5557"
+            self.CONTROL_CHANNEL = "tcp://127.0.0.1:5558"
+            self.MONITORING_CHANNEL = "tcp://127.0.0.1:5559"
+            self.LOGGING_CHANNEL = "tcp://127.0.0.1:5560"
+        else:
+            # IPC endpoints for Linux/Unix (production)
+            self.STREAMER_TO_DETECTOR = "ipc://streamer_detector"
+            self.DETECTOR_TO_DISPLAY = "ipc://detector_display"
+            self.DISPLAY_TO_WEB = "ipc://display_web"
+            self.CONTROL_CHANNEL = "ipc://control_channel"
+            self.MONITORING_CHANNEL = "ipc://monitoring_channel"
+            self.LOGGING_CHANNEL = "ipc://pipeline_logging"
+    
+    def get_info(self):
+        """Get configuration info for logging."""
+        transport = "TCP" if self.use_tcp else "IPC"
+        reason = "Windows detected" if self.is_windows else "Linux/Unix (Production)"
+        if os.getenv("FORCE_TCP"):
+            reason += " + FORCE_TCP=true"
+        
+        return {
+            "transport": transport,
+            "reason": reason,
+            "endpoints": {
+                "streamer_to_detector": self.STREAMER_TO_DETECTOR,
+                "detector_to_display": self.DETECTOR_TO_DISPLAY,
+                "logging_channel": self.LOGGING_CHANNEL
+            }
+        }
+
+# Global instance - automatically detects platform
+Endpoints = Endpoints() 

@@ -18,7 +18,7 @@ class VideoDisplay:
     """Displays video frames with motion detection overlays and timestamp."""
     
     def __init__(self, window_name: str = "Motion Detection Pipeline", 
-                 show_fps: bool = True, blur_detections: bool = False):
+                 show_fps: bool = True, blur_detections: bool = False, show_window: bool = True):
         """
         Initialize video display.
         
@@ -30,9 +30,11 @@ class VideoDisplay:
         self.window_name = window_name
         self.show_fps = show_fps
         self.blur_detections = blur_detections
+        self.show_window = show_window
         
         # ZMQ communication
         self.result_receiver: Optional[ZMQManager] = None
+        self.web_sender: Optional[ZMQManager] = None  # Send to web streamer
         
         # Threading
         self.display_thread: Optional[threading.Thread] = None
@@ -68,6 +70,12 @@ class VideoDisplay:
                 self.logger.error("Failed to start result receiver")
                 return False
             
+            # Setup web sender for forwarding processed frames
+            self.web_sender = PipelineComm.create_display_sender()
+            if not self.web_sender.start():
+                self.logger.error("Failed to start web sender")
+                return False
+            
             self.logger.info("Communication setup complete")
             return True
             
@@ -88,9 +96,10 @@ class VideoDisplay:
         if not self.setup_communication():
             return False
         
-        # Create OpenCV window
-        cv2.namedWindow(self.window_name, cv2.WINDOW_AUTOSIZE)
-        cv2.moveWindow(self.window_name, 100, 100)  # Position window
+        # Create OpenCV window only if needed
+        if self.show_window:
+            cv2.namedWindow(self.window_name, cv2.WINDOW_AUTOSIZE)
+            cv2.moveWindow(self.window_name, 100, 100)  # Position window
         
         # Reset state
         self.stop_event.clear()
@@ -106,7 +115,11 @@ class VideoDisplay:
         self.display_thread.start()
         
         self.is_displaying = True
-        self.logger.info(f"Started video display (window: {self.window_name})")
+        
+        if self.show_window:
+            self.logger.info(f"Started video display (window: {self.window_name})")
+        else:
+            self.logger.info("Started video display (forwarding mode - no window)")
         return True
     
     def stop_display(self):
@@ -142,17 +155,24 @@ class VideoDisplay:
                     continue
                 
                 if isinstance(message, DetectionResult):
-                    # Display the frame with detections
-                    self._display_frame(message)
+                    # Process and optionally display the frame with detections
+                    processed_frame = self._process_frame(message)
                     
-                    # Check for user input (ESC to quit)
-                    key = cv2.waitKey(1) & 0xFF
-                    if key == 27:  # ESC key
-                        self.logger.info("User pressed ESC - stopping display")
-                        break
-                    elif key == ord('p'):  # Pause toggle
-                        self.logger.info("Display paused - press any key to continue")
-                        cv2.waitKey(0)
+                    # Forward to web streamer
+                    self._forward_to_web(message)
+                    
+                    # Display locally if window is enabled
+                    if self.show_window:
+                        cv2.imshow(self.window_name, processed_frame)
+                        
+                        # Check for user input (ESC to quit)
+                        key = cv2.waitKey(1) & 0xFF
+                        if key == 27:  # ESC key
+                            self.logger.info("User pressed ESC - stopping display")
+                            break
+                        elif key == ord('p'):  # Pause toggle
+                            self.logger.info("Display paused - press any key to continue")
+                            cv2.waitKey(0)
                         self.logger.info("Display resumed")
         
         except Exception as e:
@@ -161,8 +181,8 @@ class VideoDisplay:
         finally:
             self._display_summary()
     
-    def _display_frame(self, result: DetectionResult):
-        """Display a single frame with detection overlays."""
+    def _process_frame(self, result: DetectionResult):
+        """Process a frame with detection overlays and return the processed frame."""
         try:
             frame = result.frame.copy()  # Work on copy to avoid modifying original
             self.current_frame_id = result.frame_id
@@ -185,10 +205,25 @@ class VideoDisplay:
             # Add detection info
             self._add_detection_info(frame, result)
             
-            # Display the frame
-            cv2.imshow(self.window_name, frame)
-            
             # Update statistics
+            self.total_frames_displayed += 1
+            self._update_fps_calculation()
+            
+            return frame
+            
+        except Exception as e:
+            self.logger.error(f"Frame processing failed: {e}")
+            return None
+    
+    def _forward_to_web(self, result: DetectionResult):
+        """Forward processed frame to web streamer."""
+        try:
+            if self.web_sender:
+                success = self.web_sender.send_detection_result(result, timeout_ms=100)
+                if not success:
+                    self.logger.debug("Web forward timeout")
+        except Exception as e:
+            self.logger.error(f"Web forwarding failed: {e}")
             self.total_frames_displayed += 1
             self._update_fps()
             
@@ -323,14 +358,19 @@ class VideoDisplay:
     
     def _cleanup(self):
         """Cleanup resources."""
-        try:
-            cv2.destroyWindow(self.window_name)
-        except:
-            pass
+        if self.show_window:
+            try:
+                cv2.destroyWindow(self.window_name)
+            except:
+                pass
         
         if self.result_receiver:
             self.result_receiver.stop()
             self.result_receiver = None
+        
+        if self.web_sender:
+            self.web_sender.stop()
+            self.web_sender = None
         
         if self.logger:
             self.logger.cleanup()

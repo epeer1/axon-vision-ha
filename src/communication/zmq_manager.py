@@ -29,9 +29,17 @@ class ZMQManager:
         self.is_connected = False
         
         # Configure socket options
-        self.socket.setsockopt(zmq.LINGER, 1000)  # Wait 1s on close
+        self.socket.setsockopt(zmq.LINGER, 0)     # Don't wait on close (immediate cleanup)
         self.socket.setsockopt(zmq.SNDHWM, 10)    # Send high water mark
         self.socket.setsockopt(zmq.RCVHWM, 10)    # Receive high water mark
+        
+        # Enable socket reuse for TCP (helps with TIME_WAIT issues)
+        if endpoint.startswith("tcp://"):
+            try:
+                self.socket.setsockopt(zmq.TCP_KEEPALIVE, 1)
+                self.socket.setsockopt(zmq.TCP_KEEPALIVE_IDLE, 1)
+            except AttributeError:
+                pass  # Some ZMQ versions don't have these options
         
         self.logger = logging.getLogger(f"ZMQManager-{endpoint}")
     
@@ -213,6 +221,24 @@ class PipelineComm:
             socket_type=zmq.PULL,
             endpoint=Endpoints.DETECTOR_TO_DISPLAY,
             bind=False  # Display connects to Detector
+        )
+    
+    @staticmethod
+    def create_display_sender() -> ZMQManager:
+        """Create sender for Display → Web communication."""
+        return ZMQManager(
+            socket_type=zmq.PUSH,
+            endpoint=Endpoints.DISPLAY_TO_WEB,
+            bind=True  # Display binds, Web connects
+        )
+    
+    @staticmethod
+    def create_web_receiver() -> ZMQManager:
+        """Create receiver for Display → Web communication."""
+        return ZMQManager(
+            socket_type=zmq.PULL,
+            endpoint=Endpoints.DISPLAY_TO_WEB,
+            bind=False  # Web connects to Display
         )
     
     @staticmethod

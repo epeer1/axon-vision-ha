@@ -7,6 +7,10 @@ import argparse
 import signal
 import sys
 import time
+from pathlib import Path
+
+# Add parent directory to path for imports
+sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from components.display.video_display import VideoDisplay
 
@@ -25,6 +29,8 @@ def main():
                        help="Disable FPS counter display")
     parser.add_argument("--blur-detections", action="store_true",
                        help="Enable motion blur on detected areas (Phase B)")
+    parser.add_argument("--no-window", action="store_true",
+                       help="Disable cv2.imshow window (forward to web only)")
     parser.add_argument("--stats-interval", type=int, default=10,
                        help="Statistics display interval in seconds (default: 10)")
     
@@ -48,11 +54,17 @@ def main():
     display = VideoDisplay(
         window_name=args.window_name,
         show_fps=not args.no_fps,
-        blur_detections=args.blur_detections
+        blur_detections=args.blur_detections,
+        show_window=not args.no_window
     )
     
     try:
-        print("Starting video display...")
+        if args.no_window:
+            print("Starting video display (forwarding mode - no window)...")
+            print("Processing and forwarding frames to web streamer")
+        else:
+            print("Starting video display...")
+            print("Display window should appear shortly...")
         
         # Start display
         if not display.start_display():
@@ -60,7 +72,6 @@ def main():
             return 1
         
         print("Video display started - waiting for frames from detector...")
-        print("Display window should appear shortly...")
         
         # Monitor statistics
         last_stats_time = time.time()

@@ -52,7 +52,7 @@ class PipelineOrchestrator:
             
             # 1. Start Centralized Logging Service
             print("  [1/4] Starting centralized logging service...")
-            logging_cmd = [sys.executable, "logging_service.py", "--verbose"]
+            logging_cmd = [sys.executable, "src/processes/logging_service.py", "--verbose"]
             logging_process = subprocess.Popen(logging_cmd, 
                                              stdout=subprocess.PIPE, 
                                              stderr=subprocess.STDOUT,
@@ -60,32 +60,39 @@ class PipelineOrchestrator:
             self.processes.append(logging_process)
             time.sleep(2)  # Give logging service time to start
             
-            # 2. Start Display Process
-            print("  [2/4] Starting display process...")
-            display_cmd = [sys.executable, "display_process.py", "--stats-interval", "15"]
-            if self.blur_detections:
-                display_cmd.append("--blur-detections")
-            
-            display_process = subprocess.Popen(display_cmd,
-                                             stdout=subprocess.PIPE,
-                                             stderr=subprocess.STDOUT,
-                                             universal_newlines=True)
-            self.processes.append(display_process)
-            time.sleep(2)  # Give display time to setup window
-            
-            # 3. Start Motion Detector Process  
-            print("  [3/4] Starting motion detector process...")
-            detector_cmd = [sys.executable, "detector_process.py", "--stats-interval", "10"]
+            # 2. Start Motion Detector Process FIRST (it binds the socket for display)
+            print("  [2/5] Starting motion detector process...")
+            detector_cmd = [sys.executable, "src/processes/detector_process.py", "--stats-interval", "10"]
             detector_process = subprocess.Popen(detector_cmd,
                                               stdout=subprocess.PIPE,
                                               stderr=subprocess.STDOUT,
                                               universal_newlines=True)
             self.processes.append(detector_process)
-            time.sleep(1)  # Give detector time to connect
+            time.sleep(3)  # Give detector time to bind sockets
             
-            # 4. Start Video Streamer Process (last, as it drives the pipeline)
-            print("  [4/4] Starting video streamer process...")
-            streamer_cmd = [sys.executable, "streamer_process.py", str(self.video_path)]
+            # 3. Start Web Streamer Process (binds web server)
+            print("  [3/5] Starting web streamer process...")
+            web_streamer_cmd = [sys.executable, "src/processes/web_streamer_process.py", "--port", "5000"]
+            web_streamer_process = subprocess.Popen(web_streamer_cmd,
+                                                   stdout=subprocess.PIPE,
+                                                   stderr=subprocess.STDOUT,
+                                                   universal_newlines=True)
+            self.processes.append(web_streamer_process)
+            time.sleep(3)  # Give web streamer time to start
+            
+            # 4. Start Video Display Process (connects to detector, binds for web)
+            print("  [4/5] Starting video display process...")
+            display_cmd = [sys.executable, "src/processes/display_process.py", "--no-window"]
+            display_process = subprocess.Popen(display_cmd,
+                                             stdout=subprocess.PIPE,
+                                             stderr=subprocess.STDOUT,
+                                             universal_newlines=True)
+            self.processes.append(display_process)
+            time.sleep(2)  # Give display time to connect
+            
+            # 5. Start Video Streamer Process (LAST - starts the data flow)
+            print("  [5/5] Starting video streamer process...")
+            streamer_cmd = [sys.executable, "src/processes/streamer_process.py", str(self.video_path)]
             streamer_process = subprocess.Popen(streamer_cmd,
                                               stdout=subprocess.PIPE,
                                               stderr=subprocess.STDOUT,
@@ -93,24 +100,45 @@ class PipelineOrchestrator:
             self.processes.append(streamer_process)
             
             print("-" * 80)
-            print("✅ ALL PIPELINE COMPONENTS STARTED SUCCESSFULLY!")
+            print("ALL PIPELINE COMPONENTS STARTED SUCCESSFULLY!")
             print("-" * 80)
             print("PIPELINE ARCHITECTURE:")
-            print("  Streamer Process  → (ZMQ/IPC) → Detector Process")
-            print("  Detector Process  → (ZMQ/IPC) → Display Process")
-            print("  All Components    → (ZMQ/IPC) → Logging Service")
+            print("  Streamer Process  → (ZMQ) → Detector Process")
+            print("  Detector Process  → (ZMQ) → Display Process")
+            print("  Display Process   → (ZMQ) → Web Streamer Process")
+            print("  Web Streamer      → (HTTP) → Browser Display")
+            print("  All Components    → (ZMQ) → Logging Service")
+            print("-" * 80)
+            print("WEB STREAMING INTERFACE:")
+            print("  URL: http://127.0.0.1:5000")
+            print("  Opening browser automatically in 5 seconds...")
             print("-" * 80)
             print("WHAT YOU SHOULD SEE:")
-            print("  1. OpenCV window showing video with motion detection boxes")
-            print("  2. Real-time timestamp in top-left corner")
-            print("  3. FPS counter and detection info overlays")
+            print("  1. Real-time video stream with motion detection boxes")
+            print("  2. Live statistics (FPS, frames processed, uptime)")
+            print("  3. Professional web interface with controls")
             print("  4. Centralized logging in 'pipeline.log' file")
             print("-" * 80)
             print("CONTROLS:")
-            print("  ESC key    = Stop video display")
-            print("  P key      = Pause/resume video")
+            print("  Browser    = View live video stream")
             print("  Ctrl+C     = Stop entire pipeline")
             print("-" * 80)
+            
+            # Auto-open browser after a short delay
+            import threading
+            import webbrowser
+            def open_browser():
+                import time
+                time.sleep(5)  # Give web server time to start
+                try:
+                    webbrowser.open("http://127.0.0.1:5000")
+                    print("Browser opened to view live stream!")
+                except Exception as e:
+                    print(f"Could not auto-open browser: {e}")
+                    print("Please manually open: http://127.0.0.1:5000")
+            
+            browser_thread = threading.Thread(target=open_browser, daemon=True)
+            browser_thread.start()
             
             return True
             
@@ -135,24 +163,24 @@ class PipelineOrchestrator:
                         terminated_processes.append((i, process))
                 
                 if terminated_processes:
-                    process_names = ["Logging", "Display", "Detector", "Streamer"]
+                    process_names = ["Logging", "Detector", "WebStreamer", "Display", "Streamer"]
                     for i, process in terminated_processes:
                         process_name = process_names[i] if i < len(process_names) else f"Process{i}"
                         exit_code = process.returncode
                         print(f"  {process_name} process terminated (exit code: {exit_code})")
                     
                     # If streamer (video source) terminates, pipeline is done
-                    if any(i == 3 for i, _ in terminated_processes):  # Streamer is index 3
-                        print("\n🎬 Video streaming completed - pipeline finished!")
+                    if any(i == 4 for i, _ in terminated_processes):  # Streamer is index 4
+                        print("\nVideo streaming completed - pipeline finished!")
                         break
                     
                     # If display terminates, user probably closed window
-                    if any(i == 1 for i, _ in terminated_processes):  # Display is index 1
-                        print("\n🖥️  Display window closed - stopping pipeline")
+                    if any(i == 3 for i, _ in terminated_processes):  # Display is index 3
+                        print("\nDisplay window closed - stopping pipeline")
                         break
             
         except KeyboardInterrupt:
-            print("\n⏹️  Pipeline monitoring interrupted by user")
+            print("\nPipeline monitoring interrupted by user")
         
         finally:
             print("\nShutting down pipeline...")
@@ -166,7 +194,7 @@ class PipelineOrchestrator:
         print("Stopping pipeline components...")
         
         # Stop processes in reverse order (streamer first to stop data flow)
-        process_names = ["Logging", "Display", "Detector", "Streamer"]
+        process_names = ["Logging", "Detector", "WebStreamer", "Display", "Streamer"]
         for i in reversed(range(len(self.processes))):
             if i < len(self.processes):
                 process = self.processes[i]
@@ -185,7 +213,7 @@ class PipelineOrchestrator:
                         print(f"    Error stopping {name}: {e}")
         
         self.processes.clear()
-        print("✅ Pipeline shutdown complete")
+        print("Pipeline shutdown complete")
     
     def show_logs(self):
         """Display the centralized log file if it exists."""
@@ -238,8 +266,8 @@ Examples:
         if args.show_logs:
             orchestrator.show_logs()
         
-        print("\n🎉 Phase A pipeline demonstration completed successfully!")
-        print("📄 Check 'pipeline.log' for detailed execution logs")
+        print("\nPhase A pipeline demonstration completed successfully!")
+        print("Check 'pipeline.log' for detailed execution logs")
         
         return 0
         

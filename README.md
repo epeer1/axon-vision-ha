@@ -47,14 +47,17 @@ pip install -r requirements.txt
 ### Run Complete Pipeline
 
 ```bash
-# Basic usage
-python phase_a_runner.py "People - 6387.mp4"
+# Basic usage (uses default video in data/)
+python run_pipeline.py
+
+# With specific video file
+python run_pipeline.py "data/People - 6387.mp4"
 
 # With motion blur (Phase B)
-python phase_a_runner.py "People - 6387.mp4" --blur-detections
+python run_pipeline.py "data/People - 6387.mp4" --blur-detections
 
 # Show logs after completion
-python phase_a_runner.py "People - 6387.mp4" --show-logs
+python run_pipeline.py "data/People - 6387.mp4" --show-logs
 ```
 
 ### Controls
@@ -70,36 +73,49 @@ AxonVisionHomeAssignment/
 ├── requirements.txt             # Python dependencies
 ├── ARCHITECTURE.md              # Detailed system architecture
 ├── assignment-description.md    # Original assignment requirements
+├── run_pipeline.py             # Simple runner script
 │
-├── # Phase Runners
-├── phase_a_runner.py           # Complete pipeline orchestrator
+├── data/                       # Video files
+│   └── People - 6387.mp4       # Test video
 │
-├── # Process Executables  
-├── logging_service.py          # Centralized logging service
-├── streamer_process.py         # Video streaming process
-├── detector_process.py         # Motion detection process
-├── display_process.py          # Video display process
+├── src/                        # Source code
+│   ├── phase_a_runner.py       # Complete pipeline orchestrator
+│   │
+│   ├── processes/              # Process entry points
+│   │   ├── logging_service.py  # Centralized logging service
+│   │   ├── streamer_process.py # Video streaming process
+│   │   ├── detector_process.py # Motion detection process
+│   │   ├── display_process.py  # Video display process
+│   │   └── web_streamer_process.py # Web streaming process
+│   │
+│   ├── components/             # Pipeline components
+│   │   ├── streamer/
+│   │   │   └── video_streamer.py   # VideoStreamer class
+│   │   ├── detector/
+│   │   │   └── motion_detector.py  # MotionDetector class
+│   │   └── display/
+│   │       ├── video_display.py    # VideoDisplay class
+│   │       └── web_streamer.py    # WebStreamer class
+│   │
+│   ├── core/                   # Core data structures
+│   │   └── data_models.py      # Pipeline data structures
+│   │
+│   ├── communication/          # IPC/Network communication
+│   │   ├── protocol.py         # ZMQ message serialization
+│   │   └── zmq_manager.py      # ZMQ socket management
+│   │
+│   └── utils/                  # Utilities
+│       └── centralized_logger.py # Logging infrastructure
 │
-├── # Core Framework
-├── core/
-│   ├── data_models.py          # Pipeline data structures
-├── communication/
-│   ├── protocol.py             # ZMQ message serialization
-│   └── zmq_manager.py          # ZMQ socket management
-├── utils/
-│   └── centralized_logger.py   # Logging infrastructure
+├── examples/                   # Example code
+│   └── basic_vmd.py           # Basic motion detection example
 │
-├── # Pipeline Components
-├── components/
-│   ├── streamer/
-│   │   └── video_streamer.py   # VideoStreamer class
-│   ├── detector/
-│   │   └── motion_detector.py  # MotionDetector class
-│   └── display/
-│       └── video_display.py    # VideoDisplay class
+├── tests/                      # Test suite
+│   ├── test_basic.py          # Basic functionality tests
+│   └── test_pipeline_integration.py # Integration tests
 │
-└── # Assets
-    └── People - 6387.mp4       # Test video file
+└── docs/                       # Documentation
+    └── _תרגיל תוכנה 2023.docx # Original assignment (Hebrew)
 ```
 
 ## 🔧 Individual Process Usage

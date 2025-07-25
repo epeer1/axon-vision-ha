@@ -3,6 +3,7 @@ opencv-python==4.8.1.78
 numpy==1.24.3
 pyzmq==25.1.0
 imutils==0.5.4
+flask==2.3.2
 
 # Development & Testing
 pytest==7.4.0
