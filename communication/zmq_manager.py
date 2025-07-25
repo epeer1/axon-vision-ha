@@ -30,7 +30,8 @@ class ZMQManager:
         
         # Configure socket options
         self.socket.setsockopt(zmq.LINGER, 1000)  # Wait 1s on close
-        self.socket.setsockopt(zmq.HWMARK, 10)    # Limit queue to 10 messages
+        self.socket.setsockopt(zmq.SNDHWM, 10)    # Send high water mark
+        self.socket.setsockopt(zmq.RCVHWM, 10)    # Receive high water mark
         
         self.logger = logging.getLogger(f"ZMQManager-{endpoint}")
     
