@@ -163,6 +163,7 @@ class VideoStreamer:
                 ret, frame = self.cap.read()
                 if not ret:
                     self.logger.info("End of video reached")
+                    self.is_streaming = False  # Mark streaming as done
                     break
                 
                 # Create FrameData

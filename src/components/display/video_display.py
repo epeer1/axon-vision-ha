@@ -154,6 +154,10 @@ class VideoDisplay:
                 if isinstance(message, SystemMessage):
                     if message.message_type == "end_of_stream":
                         self.logger.info("Received end-of-stream signal - ending display")
+                        # Forward end-of-stream to web streamer
+                        if self.web_sender:
+                            self.web_sender.send_system_message(message)
+                            self.logger.info("Forwarded end-of-stream to web streamer")
                         break
                     continue
                 
